@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Async D&D DM - Party Console</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #111827; color: #e5e7eb; }
+      .wrap { max-width: 920px; margin: 0 auto; padding: 20px; }
+      h1 { margin: 0 0 16px; }
+      .card { background: #1f2937; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+      input, textarea, button { width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; }
+      button { background: #2563eb; border: 0; cursor: pointer; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
+      .muted { color: #9ca3af; font-size: 13px; }
+      .ok { color: #34d399; }
+      .log { max-height: 280px; overflow: auto; background: #0b1220; padding: 10px; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Async D&D DM - Party Console</h1>
+      <p class="muted">Quick MVP UI for friend testing. Use this to create a campaign, join, and post actions.</p>
+
+      <div class="card">
+        <h3>1) Create campaign</h3>
+        <input id="title" placeholder="Campaign title" value="Lost Mine Async" />
+        <button onclick="createCampaign()">Create Campaign</button>
+        <p class="mono" id="campaignInfo"></p>
+      </div>
+
+      <div class="card">
+        <h3>2) Join party + post action</h3>
+        <div class="row">
+          <div>
+            <label>Name</label>
+            <input id="playerName" placeholder="Alice" />
+          </div>
+          <div>
+            <label>Character</label>
+            <input id="characterName" placeholder="Aria" />
+          </div>
+        </div>
+        <button onclick="joinParty()">Join Party</button>
+
+        <label>Player action</label>
+        <textarea id="action" rows="3" placeholder="I inspect the room for hidden doors."></textarea>
+        <button onclick="postAction()">Post Player Action</button>
+      </div>
+
+      <div class="card">
+        <h3>3) Ask DM for next turn</h3>
+        <button onclick="runDmTurn()">Generate DM Turn</button>
+      </div>
+
+      <div class="card">
+        <h3>Response log</h3>
+        <div id="log" class="log mono"></div>
+      </div>
+    </div>
+
+    <script>
+      let campaignId = null;
+      let partyCode = null;
+
+      function addLog(obj) {
+        const log = document.getElementById("log");
+        const pre = document.createElement("pre");
+        pre.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+        log.prepend(pre);
+      }
+
+      async function api(path, method = "GET", body = null, auth = false) {
+        const headers = { "Content-Type": "application/json" };
+        if (auth && partyCode) headers["X-Party-Code"] = partyCode;
+        const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json();
+        if (!res.ok) throw new Error(JSON.stringify(data));
+        return data;
+      }
+
+      async function createCampaign() {
+        try {
+          const title = document.getElementById("title").value;
+          const data = await api("/campaigns", "POST", { title, source_type: "custom" });
+          campaignId = data.id;
+          partyCode = data.party_code;
+          document.getElementById("campaignInfo").innerHTML = `<span class='ok'>Campaign created</span><br>ID: ${campaignId}<br>Party code: ${partyCode}`;
+          addLog(data);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      async function joinParty() {
+        try {
+          const name = document.getElementById("playerName").value;
+          const character_name = document.getElementById("characterName").value;
+          const data = await api(`/campaigns/${campaignId}/players`, "POST", { name, character_name }, true);
+          addLog(data);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      async function postAction() {
+        try {
+          const content = document.getElementById("action").value;
+          const data = await api(`/campaigns/${campaignId}/events`, "POST", {
+            type: "player_action",
+            actor: document.getElementById("characterName").value || document.getElementById("playerName").value || "Player",
+            content,
+          }, true);
+          addLog(data.events[data.events.length - 1]);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      async function runDmTurn() {
+        try {
+          const data = await api(`/campaigns/${campaignId}/dm-turn`, "POST", {
+            instructions: "Respond as a concise D&D DM and ask what players do next."
+          }, true);
+          addLog(data.events[data.events.length - 1]);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+    </script>
+  </body>
+</html>
