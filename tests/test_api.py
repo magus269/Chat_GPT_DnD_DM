@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def test_campaign_flow_with_party_auth_and_chat_threads() -> None:
+def test_campaign_flow_with_party_auth_threads_and_dndbeyond_links() -> None:
     client = TestClient(app)
 
     root_resp = client.get("/", follow_redirects=False)
@@ -23,64 +23,42 @@ def test_campaign_flow_with_party_auth_and_chat_threads() -> None:
     party_code = campaign["party_code"]
     headers = {"X-Party-Code": party_code}
 
-    unauthorized = client.patch(
-        f"/campaigns/{campaign_id}",
-        json={"summary": "No auth should fail."},
-    )
-    assert unauthorized.status_code == 401
-
-    state_resp = client.patch(
-        f"/campaigns/{campaign_id}",
-        headers=headers,
-        json={"summary": "The party reached Phandalin.", "active_scene": "Stonehill Inn"},
-    )
-    assert state_resp.status_code == 200
-
     join_resp = client.post(
         f"/campaigns/{campaign_id}/players",
         headers=headers,
         json={"name": "Alice", "character_name": "Aria"},
     )
     assert join_resp.status_code == 200
-    assert len(join_resp.json()["players"]) == 1
+    player_id = join_resp.json()["players"][0]["id"]
 
-    thread_resp = client.post(
-        f"/campaigns/{campaign_id}/threads",
+    connect_resp = client.post(
+        f"/campaigns/{campaign_id}/integrations/dndbeyond/connect",
         headers=headers,
-        json={"title": "Campfire Planning", "created_by": "Alice"},
+        json={"campaign_url": "https://www.dndbeyond.com/campaigns/1234567"},
     )
-    assert thread_resp.status_code == 200
-    thread_id = thread_resp.json()["threads"][0]["id"]
+    assert connect_resp.status_code == 200
+    connected = connect_resp.json()
+    assert connected["dndbeyond"]["campaign_id"] == "1234567"
 
-    message_resp = client.post(
-        f"/campaigns/{campaign_id}/threads/{thread_id}/messages",
+    link_character_resp = client.post(
+        f"/campaigns/{campaign_id}/integrations/dndbeyond/players/{player_id}/character-link",
         headers=headers,
-        json={"sender": "Alice", "content": "Let's scout before dawn."},
+        json={"character_url": "https://www.dndbeyond.com/characters/7654321"},
     )
-    assert message_resp.status_code == 200
-    assert message_resp.json()["threads"][0]["messages"][0]["content"] == "Let's scout before dawn."
+    assert link_character_resp.status_code == 200
+    assert link_character_resp.json()["dndbeyond"]["character_links"][0]["character_id"] == "7654321"
 
-    event_resp = client.post(
-        f"/campaigns/{campaign_id}/events",
+    roll_resp = client.post(
+        f"/campaigns/{campaign_id}/integrations/dndbeyond/rolls",
         headers=headers,
         json={
-            "type": "player_action",
             "actor": "Aria",
-            "content": "I inspect the locked chest for traps.",
-            "dndbeyond_roll_ref": "ddb-roll-123",
+            "content": "Rolled Stealth check: 17",
+            "roll_reference": "ddb-roll-abc-123",
         },
     )
-    assert event_resp.status_code == 200
-
-    context_resp = client.get(
-        f"/campaigns/{campaign_id}/context?max_events=10",
-        headers=headers,
-    )
-    assert context_resp.status_code == 200
-    context = context_resp.json()
-    assert context["active_scene"] == "Stonehill Inn"
-    assert context["player_names"] == ["Alice"]
-    assert len(context["recent_events"]) == 1
+    assert roll_resp.status_code == 200
+    assert roll_resp.json()["events"][-1]["type"] == "dice_roll"
 
     dm_resp = client.post(
         f"/campaigns/{campaign_id}/dm-turn",

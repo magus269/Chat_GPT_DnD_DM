@@ -18,6 +18,10 @@ This repository contains a starter backend for an **asynchronous D&D campaign ma
 - Generate a DM turn from campaign context via a pluggable provider:
   - `mock` provider (default, offline-safe).
   - `openai` provider (requires `OPENAI_API_KEY`, optional package).
+- D&D Beyond adapter endpoints:
+  - connect DDB campaign URL to local campaign
+  - link each player to a DDB character URL
+  - ingest DDB roll references into campaign events
 - Includes a basic browser test UI at `/app`.
 - Persist campaign state to `./data/campaigns/*.json`.
 
@@ -27,6 +31,8 @@ This repository contains a starter backend for an **asynchronous D&D campaign ma
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+# optional for real AI DM responses
+pip install openai
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -34,6 +40,19 @@ Then open:
 
 - Party test UI: `http://127.0.0.1:8000/app`
 - API docs: `http://127.0.0.1:8000/docs`
+
+## D&D Beyond integration (current MVP)
+
+This app does **not** ask for or store D&D Beyond login credentials.
+
+Instead, it supports URL-based linkage and roll-reference ingestion:
+
+1. Create local campaign.
+2. `POST /campaigns/{id}/integrations/dndbeyond/connect` with DDB campaign URL.
+3. For each player, call `POST /campaigns/{id}/integrations/dndbeyond/players/{player_id}/character-link`.
+4. Ingest roll references with `POST /campaigns/{id}/integrations/dndbeyond/rolls`.
+
+This matches a safer adapter approach while keeping room for future sync automation.
 
 ## Running a first friend test
 
@@ -66,13 +85,5 @@ Then share the generated HTTPS URL, and have friends open `<url>/app`.
 1. Replace party-code header auth with real user auth (JWT/session).
 2. Add role permissions (DM/co-DM/player/observer).
 3. Add websocket updates for live chat without polling.
-4. Add D&D Beyond connector for roll + character sync.
+4. Add a D&D Beyond automation layer (browser extension or authorized sync worker).
 5. Switch persistence from JSON files to Postgres.
-
-## Notes on D&D Beyond integration
-
-D&D Beyond does not provide an official fully open API for all campaign interactions, so production integration may require one of:
-
-- user-authorized data export/import workflows,
-- browser-extension-assisted sync,
-- or manual linking endpoints.

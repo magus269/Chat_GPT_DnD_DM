@@ -5,7 +5,7 @@ from enum import Enum
 from typing import List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class EventType(str, Enum):
@@ -22,6 +22,19 @@ class CampaignEvent(BaseModel):
     content: str
     dndbeyond_roll_ref: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class DndBeyondCharacterLink(BaseModel):
+    player_id: str
+    character_url: str
+    character_id: Optional[str] = None
+
+
+class DndBeyondConfig(BaseModel):
+    campaign_url: Optional[str] = None
+    campaign_id: Optional[str] = None
+    character_links: List[DndBeyondCharacterLink] = Field(default_factory=list)
+    last_synced_at: Optional[datetime] = None
 
 
 class Player(BaseModel):
@@ -56,6 +69,7 @@ class Campaign(BaseModel):
     summary: str = ""
     active_scene: str = ""
     party_code: str = Field(default_factory=lambda: str(uuid4())[:8])
+    dndbeyond: DndBeyondConfig = Field(default_factory=DndBeyondConfig)
     players: List[Player] = Field(default_factory=list)
     threads: List[ChatThread] = Field(default_factory=list)
     events: List[CampaignEvent] = Field(default_factory=list)
@@ -97,6 +111,20 @@ class CreateThreadRequest(BaseModel):
 class PostThreadMessageRequest(BaseModel):
     sender: str
     content: str
+
+
+class ConnectDndBeyondRequest(BaseModel):
+    campaign_url: HttpUrl
+
+
+class LinkDndBeyondCharacterRequest(BaseModel):
+    character_url: HttpUrl
+
+
+class DndBeyondRollRequest(BaseModel):
+    actor: str
+    content: str
+    roll_reference: str
 
 
 class AddEventRequest(BaseModel):

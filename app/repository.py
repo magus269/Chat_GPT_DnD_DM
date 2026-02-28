@@ -11,6 +11,7 @@ from app.models import (
     CampaignEvent,
     ChatMessage,
     ChatThread,
+    DndBeyondCharacterLink,
     Player,
 )
 
@@ -57,6 +58,69 @@ class CampaignRepository:
         if active_scene is not None:
             campaign.active_scene = active_scene
 
+        return self.save_campaign(campaign)
+
+    def update_dndbeyond_campaign(
+        self,
+        campaign_id: str,
+        campaign_url: str,
+        dndbeyond_campaign_id: Optional[str],
+    ) -> Optional[Campaign]:
+        campaign = self.get_campaign(campaign_id)
+        if campaign is None:
+            return None
+
+        campaign.dndbeyond.campaign_url = campaign_url
+        campaign.dndbeyond.campaign_id = dndbeyond_campaign_id
+        campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
+        campaign.source_type = "source_book"
+        campaign.source_reference = (
+            f"DDB_CAMPAIGN:{dndbeyond_campaign_id}"
+            if dndbeyond_campaign_id
+            else "DDB_CAMPAIGN:unknown"
+        )
+        return self.save_campaign(campaign)
+
+    def link_dndbeyond_character(
+        self,
+        campaign_id: str,
+        player_id: str,
+        character_url: str,
+        character_id: Optional[str],
+    ) -> Optional[Campaign]:
+        campaign = self.get_campaign(campaign_id)
+        if campaign is None:
+            return None
+
+        if not any(player.id == player_id for player in campaign.players):
+            return None
+
+        replaced = False
+        updated_links: List[DndBeyondCharacterLink] = []
+        for link in campaign.dndbeyond.character_links:
+            if link.player_id == player_id:
+                updated_links.append(
+                    DndBeyondCharacterLink(
+                        player_id=player_id,
+                        character_url=character_url,
+                        character_id=character_id,
+                    )
+                )
+                replaced = True
+            else:
+                updated_links.append(link)
+
+        if not replaced:
+            updated_links.append(
+                DndBeyondCharacterLink(
+                    player_id=player_id,
+                    character_url=character_url,
+                    character_id=character_id,
+                )
+            )
+
+        campaign.dndbeyond.character_links = updated_links
+        campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
         return self.save_campaign(campaign)
 
     def add_player(self, campaign_id: str, player: Player) -> Optional[Campaign]:

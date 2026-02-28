@@ -15,6 +15,9 @@
    - Player chat is organized as campaign `threads` with threaded messages.
 5. **Friend-testing web console**
    - Static UI is served from `/app` for quick multiplayer trials.
+6. **D&D Beyond adapter endpoints**
+   - Link a DDB campaign URL and player character URLs.
+   - Ingest external dice roll references as `dice_roll` events.
 
 ## Auth approach (MVP)
 
@@ -34,6 +37,7 @@
   - official source access,
   - dice roll outcomes.
 - Store references in this app so story continuity can include those outcomes.
+- Do not collect or store DDB login credentials in this service.
 
 ## Next technical milestones
 
@@ -41,4 +45,4 @@
 - Switch persistence from JSON files to Postgres.
 - Add websocket/chat channel for real-time and async push.
 - Add summarization snapshots to reduce token usage.
-- Add adapter service for D&D Beyond sync/import.
+- Add automation for D&D Beyond sync (extension-backed or authorized integration worker).

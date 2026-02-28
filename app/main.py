@@ -10,6 +10,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.dm_service import DMService
+from app.dndbeyond import extract_campaign_id, extract_character_id
 from app.models import (
     AddEventRequest,
     Campaign,
@@ -17,17 +18,21 @@ from app.models import (
     CampaignEvent,
     ChatMessage,
     ChatThread,
+    ConnectDndBeyondRequest,
     CreateCampaignRequest,
     CreateThreadRequest,
+    DndBeyondRollRequest,
     GenerateTurnRequest,
     JoinPartyRequest,
+    LinkDndBeyondCharacterRequest,
     Player,
     PostThreadMessageRequest,
     UpdateCampaignStateRequest,
+    EventType,
 )
 from app.repository import CampaignRepository
 
-app = FastAPI(title="Async D&D DM App", version="0.4.0")
+app = FastAPI(title="Async D&D DM App", version="0.5.0")
 repo = CampaignRepository()
 
 app.add_middleware(
@@ -104,6 +109,72 @@ def update_campaign_state(
         summary=req.summary,
         active_scene=req.active_scene,
     )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return updated
+
+
+@app.post("/campaigns/{campaign_id}/integrations/dndbeyond/connect", response_model=Campaign)
+def connect_dndbeyond_campaign(
+    campaign_id: str,
+    req: ConnectDndBeyondRequest,
+    x_party_code: str | None = Header(default=None),
+) -> Campaign:
+    campaign = _campaign_or_404(campaign_id)
+    _require_party_access(campaign, x_party_code)
+
+    ddb_campaign_id = extract_campaign_id(str(req.campaign_url))
+    updated = repo.update_dndbeyond_campaign(
+        campaign_id,
+        campaign_url=str(req.campaign_url),
+        dndbeyond_campaign_id=ddb_campaign_id,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return updated
+
+
+@app.post(
+    "/campaigns/{campaign_id}/integrations/dndbeyond/players/{player_id}/character-link",
+    response_model=Campaign,
+)
+def link_dndbeyond_character(
+    campaign_id: str,
+    player_id: str,
+    req: LinkDndBeyondCharacterRequest,
+    x_party_code: str | None = Header(default=None),
+) -> Campaign:
+    campaign = _campaign_or_404(campaign_id)
+    _require_party_access(campaign, x_party_code)
+
+    ddb_character_id = extract_character_id(str(req.character_url))
+    updated = repo.link_dndbeyond_character(
+        campaign_id,
+        player_id=player_id,
+        character_url=str(req.character_url),
+        character_id=ddb_character_id,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Campaign or player not found")
+    return updated
+
+
+@app.post("/campaigns/{campaign_id}/integrations/dndbeyond/rolls", response_model=Campaign)
+def add_dndbeyond_roll(
+    campaign_id: str,
+    req: DndBeyondRollRequest,
+    x_party_code: str | None = Header(default=None),
+) -> Campaign:
+    campaign = _campaign_or_404(campaign_id)
+    _require_party_access(campaign, x_party_code)
+
+    roll_event = CampaignEvent(
+        type=EventType.DICE_ROLL,
+        actor=req.actor,
+        content=req.content,
+        dndbeyond_roll_ref=req.roll_reference,
+    )
+    updated = repo.append_event(campaign_id, roll_event)
     if updated is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return updated
