@@ -11,6 +11,7 @@ from app.models import (
     CampaignEvent,
     ChatMessage,
     ChatThread,
+    DndBeyondCampaignSummary,
     DndBeyondCharacterLink,
     Player,
 )
@@ -60,6 +61,34 @@ class CampaignRepository:
 
         return self.save_campaign(campaign)
 
+    def set_source_book(
+        self,
+        campaign_id: str,
+        source_book_key: str,
+        source_book_title: str,
+    ) -> Optional[Campaign]:
+        campaign = self.get_campaign(campaign_id)
+        if campaign is None:
+            return None
+
+        campaign.source_type = "source_book"
+        campaign.source_book = source_book_title
+        campaign.source_reference = f"SOURCE_BOOK:{source_book_key}"
+        return self.save_campaign(campaign)
+
+    def discover_dndbeyond_campaigns(
+        self,
+        campaign_id: str,
+        discovered: List[DndBeyondCampaignSummary],
+    ) -> Optional[Campaign]:
+        campaign = self.get_campaign(campaign_id)
+        if campaign is None:
+            return None
+
+        campaign.dndbeyond.accessible_campaigns = discovered
+        campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
+        return self.save_campaign(campaign)
+
     def update_dndbeyond_campaign(
         self,
         campaign_id: str,
@@ -73,7 +102,6 @@ class CampaignRepository:
         campaign.dndbeyond.campaign_url = campaign_url
         campaign.dndbeyond.campaign_id = dndbeyond_campaign_id
         campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
-        campaign.source_type = "source_book"
         campaign.source_reference = (
             f"DDB_CAMPAIGN:{dndbeyond_campaign_id}"
             if dndbeyond_campaign_id

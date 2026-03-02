@@ -21,19 +21,33 @@ from app.models import (
     ConnectDndBeyondRequest,
     CreateCampaignRequest,
     CreateThreadRequest,
+    DiscoverDndBeyondCampaignsRequest,
+    DndBeyondCampaignSummary,
     DndBeyondRollRequest,
+    EventType,
     GenerateTurnRequest,
     JoinPartyRequest,
     LinkDndBeyondCharacterRequest,
     Player,
     PostThreadMessageRequest,
+    SetSourceBookRequest,
+    SourceBookOption,
     UpdateCampaignStateRequest,
-    EventType,
 )
 from app.repository import CampaignRepository
 
-app = FastAPI(title="Async D&D DM App", version="0.5.0")
+app = FastAPI(title="Async D&D DM App", version="0.6.0")
 repo = CampaignRepository()
+
+SOURCE_BOOK_OPTIONS = [
+    SourceBookOption(key="phb", title="Player's Handbook"),
+    SourceBookOption(key="xgte", title="Xanathar's Guide to Everything"),
+    SourceBookOption(key="tcoe", title="Tasha's Cauldron of Everything"),
+    SourceBookOption(key="lmoP", title="Lost Mine of Phandelver"),
+    SourceBookOption(key="cos", title="Curse of Strahd"),
+    SourceBookOption(key="toA", title="Tomb of Annihilation"),
+    SourceBookOption(key="bgdia", title="Baldur's Gate: Descent Into Avernus"),
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,6 +89,11 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/metadata/source-books", response_model=List[SourceBookOption])
+def list_source_books() -> List[SourceBookOption]:
+    return SOURCE_BOOK_OPTIONS
+
+
 @app.post("/campaigns", response_model=Campaign)
 def create_campaign(req: CreateCampaignRequest) -> Campaign:
     campaign = Campaign(
@@ -109,6 +128,47 @@ def update_campaign_state(
         summary=req.summary,
         active_scene=req.active_scene,
     )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return updated
+
+
+@app.post("/campaigns/{campaign_id}/source-book", response_model=Campaign)
+def set_source_book(
+    campaign_id: str,
+    req: SetSourceBookRequest,
+    x_party_code: str | None = Header(default=None),
+) -> Campaign:
+    campaign = _campaign_or_404(campaign_id)
+    _require_party_access(campaign, x_party_code)
+
+    updated = repo.set_source_book(campaign_id, req.key, req.title)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return updated
+
+
+@app.post("/campaigns/{campaign_id}/integrations/dndbeyond/discover-campaigns", response_model=Campaign)
+def discover_dndbeyond_campaigns(
+    campaign_id: str,
+    req: DiscoverDndBeyondCampaignsRequest,
+    x_party_code: str | None = Header(default=None),
+) -> Campaign:
+    campaign = _campaign_or_404(campaign_id)
+    _require_party_access(campaign, x_party_code)
+
+    discovered: List[DndBeyondCampaignSummary] = []
+    for item in req.campaigns:
+        campaign_url = str(item.campaign_url)
+        discovered.append(
+            DndBeyondCampaignSummary(
+                campaign_url=campaign_url,
+                campaign_id=extract_campaign_id(campaign_url),
+                title=item.title,
+            )
+        )
+
+    updated = repo.discover_dndbeyond_campaigns(campaign_id, discovered)
     if updated is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return updated
