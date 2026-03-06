@@ -6,10 +6,10 @@
     <title>Async D&D DM - Party Console</title>
     <style>
       body { font-family: Arial, sans-serif; margin: 0; background: #111827; color: #e5e7eb; }
-      .wrap { max-width: 920px; margin: 0 auto; padding: 20px; }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
       h1 { margin: 0 0 16px; }
       .card { background: #1f2937; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-      input, textarea, button { width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; }
+      input, textarea, button, select { width: 100%; margin-top: 8px; padding: 10px; border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; }
       button { background: #2563eb; border: 0; cursor: pointer; }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
@@ -21,7 +21,7 @@
   <body>
     <div class="wrap">
       <h1>Async D&D DM - Party Console</h1>
-      <p class="muted">Quick MVP UI for friend testing. Use this to create a campaign, join, and post actions.</p>
+      <p class="muted">MVP testing console: campaign setup, source book selection, D&D Beyond links, dice roll capture, DM turn.</p>
 
       <div class="card">
         <h3>1) Create campaign</h3>
@@ -31,7 +31,30 @@
       </div>
 
       <div class="card">
-        <h3>2) Join party + post action</h3>
+        <h3>2) Choose source book</h3>
+        <select id="sourceBook"></select>
+        <button onclick="setSourceBook()">Set Source Book</button>
+      </div>
+
+      <div class="card">
+        <h3>3) D&D Beyond campaigns (manual discover + connect)</h3>
+        <div class="row">
+          <div>
+            <label>DDB campaign URL</label>
+            <input id="ddbCampaignUrl" placeholder="https://www.dndbeyond.com/campaigns/1234567" />
+          </div>
+          <div>
+            <label>Campaign title (optional)</label>
+            <input id="ddbCampaignTitle" placeholder="My DDB Campaign" />
+          </div>
+        </div>
+        <button onclick="addDiscoveredCampaign()">Add to discovered list</button>
+        <select id="discoveredCampaigns"></select>
+        <button onclick="connectSelectedCampaign()">Connect selected DDB campaign</button>
+      </div>
+
+      <div class="card">
+        <h3>4) Join party + post action</h3>
         <div class="row">
           <div>
             <label>Name</label>
@@ -50,8 +73,33 @@
       </div>
 
       <div class="card">
-        <h3>3) Ask DM for next turn</h3>
+        <h3>5) Capture D&D Beyond dice roll reference</h3>
+        <div class="row">
+          <div>
+            <label>Actor</label>
+            <input id="rollActor" placeholder="Aria" />
+          </div>
+          <div>
+            <label>Roll reference</label>
+            <input id="rollRef" placeholder="ddb-roll-abc-123" />
+          </div>
+        </div>
+        <label>Roll result summary</label>
+        <input id="rollContent" placeholder="Stealth check 17" />
+        <button onclick="captureDdbRoll()">Capture DDB Roll in Log</button>
+      </div>
+
+      <div class="card">
+        <h3>6) Ask DM for next turn</h3>
         <button onclick="runDmTurn()">Generate DM Turn</button>
+      </div>
+
+
+      <div class="card">
+        <h3>7) Browser-extension bridge (AboveVTT-style)</h3>
+        <button onclick="rotateBridgeToken()">Rotate Bridge Token</button>
+        <p id="bridgeToken" class="mono"></p>
+        <button onclick="sendBridgeTestRoll()">Send Test Bridge Roll Event</button>
       </div>
 
       <div class="card">
@@ -63,12 +111,25 @@
     <script>
       let campaignId = null;
       let partyCode = null;
+      let discovered = [];
+      let bridgeToken = null;
 
       function addLog(obj) {
         const log = document.getElementById("log");
         const pre = document.createElement("pre");
         pre.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
         log.prepend(pre);
+      }
+
+      function refreshDiscoveredDropdown() {
+        const select = document.getElementById("discoveredCampaigns");
+        select.innerHTML = "";
+        discovered.forEach((c, idx) => {
+          const opt = document.createElement("option");
+          opt.value = String(idx);
+          opt.text = `${c.title || "Untitled"} - ${c.campaign_url}`;
+          select.appendChild(opt);
+        });
       }
 
       async function api(path, method = "GET", body = null, auth = false) {
@@ -78,6 +139,21 @@
         const data = await res.json();
         if (!res.ok) throw new Error(JSON.stringify(data));
         return data;
+      }
+
+      async function loadSourceBooks() {
+        try {
+          const books = await api("/metadata/source-books");
+          const select = document.getElementById("sourceBook");
+          books.forEach((book) => {
+            const opt = document.createElement("option");
+            opt.value = JSON.stringify(book);
+            opt.text = book.title;
+            select.appendChild(opt);
+          });
+        } catch (e) {
+          addLog(e.message);
+        }
       }
 
       async function createCampaign() {
@@ -93,12 +169,47 @@
         }
       }
 
+      async function setSourceBook() {
+        try {
+          const selected = JSON.parse(document.getElementById("sourceBook").value);
+          const data = await api(`/campaigns/${campaignId}/source-book`, "POST", selected, true);
+          addLog({ source_book: data.source_book, source_reference: data.source_reference });
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      async function addDiscoveredCampaign() {
+        try {
+          const campaign_url = document.getElementById("ddbCampaignUrl").value;
+          const title = document.getElementById("ddbCampaignTitle").value || null;
+          discovered.push({ campaign_url, title });
+          refreshDiscoveredDropdown();
+          const data = await api(`/campaigns/${campaignId}/integrations/dndbeyond/discover-campaigns`, "POST", { campaigns: discovered }, true);
+          addLog(data.dndbeyond.accessible_campaigns);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      async function connectSelectedCampaign() {
+        try {
+          const idx = Number(document.getElementById("discoveredCampaigns").value || 0);
+          const selected = discovered[idx];
+          if (!selected) throw new Error("No discovered campaign selected.");
+          const data = await api(`/campaigns/${campaignId}/integrations/dndbeyond/connect`, "POST", { campaign_url: selected.campaign_url }, true);
+          addLog({ connected_campaign: data.dndbeyond.campaign_url, campaign_id: data.dndbeyond.campaign_id });
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
       async function joinParty() {
         try {
           const name = document.getElementById("playerName").value;
           const character_name = document.getElementById("characterName").value;
           const data = await api(`/campaigns/${campaignId}/players`, "POST", { name, character_name }, true);
-          addLog(data);
+          addLog(data.players[data.players.length - 1]);
         } catch (e) {
           addLog(e.message);
         }
@@ -118,6 +229,22 @@
         }
       }
 
+      async function captureDdbRoll() {
+        try {
+          const actor = document.getElementById("rollActor").value || "Unknown";
+          const content = document.getElementById("rollContent").value || "Dice roll recorded";
+          const roll_reference = document.getElementById("rollRef").value;
+          const data = await api(`/campaigns/${campaignId}/integrations/dndbeyond/rolls`, "POST", {
+            actor,
+            content,
+            roll_reference,
+          }, true);
+          addLog(data.events[data.events.length - 1]);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
       async function runDmTurn() {
         try {
           const data = await api(`/campaigns/${campaignId}/dm-turn`, "POST", {
@@ -128,6 +255,37 @@
           addLog(e.message);
         }
       }
+
+
+      async function rotateBridgeToken() {
+        try {
+          const data = await api(`/campaigns/${campaignId}/integrations/dndbeyond/bridge-token/rotate`, "POST", null, true);
+          bridgeToken = data.bridge_token;
+          document.getElementById("bridgeToken").textContent = `Bridge token: ${bridgeToken}`;
+          addLog(data);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      async function sendBridgeTestRoll() {
+        try {
+          if (!bridgeToken) throw new Error("Rotate bridge token first.");
+          const data = await api("/integrations/dndbeyond/bridge-events", "POST", {
+            campaign_id: campaignId,
+            bridge_token: bridgeToken,
+            event_type: "dice_roll",
+            actor: document.getElementById("rollActor").value || "BridgeActor",
+            content: "Bridge captured roll",
+            roll_reference: document.getElementById("rollRef").value || "bridge-roll-ref",
+          }, false);
+          addLog(data.events[data.events.length - 1]);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      loadSourceBooks();
     </script>
   </body>
 </html>

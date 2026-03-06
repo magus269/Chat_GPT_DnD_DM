@@ -11,6 +11,7 @@ This repository contains a starter backend for an **asynchronous D&D campaign ma
 
 - Create, list, fetch, and update campaign state (summary + active scene).
 - Party access guard for campaign mutations via `X-Party-Code` header.
+- Choose a source book from API-provided options and attach it to campaign context.
 - Join players to a campaign.
 - Create chat threads and post thread messages.
 - Append timeline events (player action, dice roll reference, system note, DM narration).
@@ -19,10 +20,12 @@ This repository contains a starter backend for an **asynchronous D&D campaign ma
   - `mock` provider (default, offline-safe).
   - `openai` provider (requires `OPENAI_API_KEY`, optional package).
 - D&D Beyond adapter endpoints:
-  - connect DDB campaign URL to local campaign
+  - store discovered/accessible DDB campaign URLs for a campaign
+  - connect one DDB campaign URL to local campaign metadata
   - link each player to a DDB character URL
   - ingest DDB roll references into campaign events
-- Includes a basic browser test UI at `/app`.
+  - rotate campaign bridge tokens + ingest browser-extension bridge events (AboveVTT-style pattern)
+- Includes a basic browser test UI at `/app` with source book dropdown, dice-roll capture, and bridge-token test tools.
 - Persist campaign state to `./data/campaigns/*.json`.
 
 ## Quick start
@@ -41,26 +44,28 @@ Then open:
 - Party test UI: `http://127.0.0.1:8000/app`
 - API docs: `http://127.0.0.1:8000/docs`
 
-## D&D Beyond integration (current MVP)
+## D&D Beyond integration status
 
-This app does **not** ask for or store D&D Beyond login credentials.
+This app does **not** request or store D&D Beyond account credentials.
 
-Instead, it supports URL-based linkage and roll-reference ingestion:
+Current integration is adapter-style:
 
-1. Create local campaign.
-2. `POST /campaigns/{id}/integrations/dndbeyond/connect` with DDB campaign URL.
-3. For each player, call `POST /campaigns/{id}/integrations/dndbeyond/players/{player_id}/character-link`.
-4. Ingest roll references with `POST /campaigns/{id}/integrations/dndbeyond/rolls`.
+1. Discover/store campaign URLs you can access from DDB (`/discover-campaigns`).
+2. Select one campaign URL and connect it (`/connect`).
+3. Link local players to DDB character URLs (`/character-link`).
+4. Record DDB roll references into the campaign timeline (`/rolls`).
+5. For AboveVTT-style automation, rotate a campaign bridge token and ingest extension events via `/integrations/dndbeyond/bridge-events`.
 
-This matches a safer adapter approach while keeping room for future sync automation.
+This gives you continuity and traceability now, while leaving room for future automation (e.g., browser extension sync).
 
 ## Running a first friend test
 
 1. Create a campaign from `/app`.
 2. Copy the generated `party_code`.
-3. Share your hosted link and `party_code` with friends.
-4. Friends can join + post actions.
-5. Trigger DM turn generation after player actions.
+3. Pick a source book from dropdown and save it.
+4. Add/connect DDB campaign URL.
+5. Join players, post actions, capture DDB roll references.
+6. Trigger DM turn generation after player actions.
 
 ## Sharing a temporary public link
 
@@ -74,16 +79,10 @@ ngrok http 8000
 
 Then share the generated HTTPS URL, and have friends open `<url>/app`.
 
-## Party auth behavior (current MVP)
-
-- `POST /campaigns` returns a generated `party_code`.
-- Include that value in `X-Party-Code` for mutating or private context endpoints.
-- This is a lightweight shared-secret approach for MVP only; replace with proper auth before production.
-
 ## Suggested next steps
 
 1. Replace party-code header auth with real user auth (JWT/session).
 2. Add role permissions (DM/co-DM/player/observer).
 3. Add websocket updates for live chat without polling.
-4. Add a D&D Beyond automation layer (browser extension or authorized sync worker).
+4. Add a D&D Beyond automation layer (extension-backed sync worker).
 5. Switch persistence from JSON files to Postgres.

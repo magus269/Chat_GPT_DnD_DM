@@ -15,20 +15,20 @@
    - Player chat is organized as campaign `threads` with threaded messages.
 5. **Friend-testing web console**
    - Static UI is served from `/app` for quick multiplayer trials.
-6. **D&D Beyond adapter endpoints**
-   - Link a DDB campaign URL and player character URLs.
+6. **Source book context selection**
+   - Source book options are exposed by `/metadata/source-books` and set on campaign.
+7. **D&D Beyond adapter endpoints**
+   - Store discovered DDB campaign URLs for the current party.
+   - Connect one selected campaign URL to the local campaign.
+   - Link DDB character URLs to local players.
    - Ingest external dice roll references as `dice_roll` events.
+   - Support extension bridge token + bridge event ingestion for AboveVTT-style overlays.
 
 ## Auth approach (MVP)
 
 - Campaign creation generates a `party_code` shared secret.
 - Mutating/private endpoints require `X-Party-Code`.
 - This keeps setup simple while enabling shared async play on one campaign.
-
-## API access
-
-- CORS is enabled for all origins in this MVP to simplify local/mobile testing.
-- Tighten CORS and auth before production.
 
 ## D&D Beyond strategy
 

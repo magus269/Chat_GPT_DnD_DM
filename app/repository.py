@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from uuid import uuid4
 from pathlib import Path
 from typing import List, Optional
 
@@ -11,7 +12,9 @@ from app.models import (
     CampaignEvent,
     ChatMessage,
     ChatThread,
+    DndBeyondCampaignSummary,
     DndBeyondCharacterLink,
+    EventType,
     Player,
 )
 
@@ -60,6 +63,34 @@ class CampaignRepository:
 
         return self.save_campaign(campaign)
 
+    def set_source_book(
+        self,
+        campaign_id: str,
+        source_book_key: str,
+        source_book_title: str,
+    ) -> Optional[Campaign]:
+        campaign = self.get_campaign(campaign_id)
+        if campaign is None:
+            return None
+
+        campaign.source_type = "source_book"
+        campaign.source_book = source_book_title
+        campaign.source_reference = f"SOURCE_BOOK:{source_book_key}"
+        return self.save_campaign(campaign)
+
+    def discover_dndbeyond_campaigns(
+        self,
+        campaign_id: str,
+        discovered: List[DndBeyondCampaignSummary],
+    ) -> Optional[Campaign]:
+        campaign = self.get_campaign(campaign_id)
+        if campaign is None:
+            return None
+
+        campaign.dndbeyond.accessible_campaigns = discovered
+        campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
+        return self.save_campaign(campaign)
+
     def update_dndbeyond_campaign(
         self,
         campaign_id: str,
@@ -73,7 +104,6 @@ class CampaignRepository:
         campaign.dndbeyond.campaign_url = campaign_url
         campaign.dndbeyond.campaign_id = dndbeyond_campaign_id
         campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
-        campaign.source_type = "source_book"
         campaign.source_reference = (
             f"DDB_CAMPAIGN:{dndbeyond_campaign_id}"
             if dndbeyond_campaign_id
@@ -122,6 +152,33 @@ class CampaignRepository:
         campaign.dndbeyond.character_links = updated_links
         campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
         return self.save_campaign(campaign)
+
+
+    def rotate_dndbeyond_bridge_token(self, campaign_id: str) -> tuple[Campaign, str] | None:
+        campaign = self.get_campaign(campaign_id)
+        if campaign is None:
+            return None
+
+        token = str(uuid4())
+        campaign.dndbeyond.bridge_token = token
+        campaign.dndbeyond.last_synced_at = datetime.now(timezone.utc)
+        self.save_campaign(campaign)
+        return campaign, token
+
+    def append_bridge_event(
+        self,
+        campaign_id: str,
+        actor: str,
+        content: str,
+        roll_reference: Optional[str],
+        event_type: str,
+    ) -> Optional[Campaign]:
+        mapped = event_type.strip().lower()
+        if mapped == "dice_roll":
+            kind = CampaignEvent(type=EventType.DICE_ROLL, actor=actor, content=content, dndbeyond_roll_ref=roll_reference)
+        else:
+            kind = CampaignEvent(type=EventType.SYSTEM_NOTE, actor=actor, content=f"[DDB:{event_type}] {content}", dndbeyond_roll_ref=roll_reference)
+        return self.append_event(campaign_id, kind)
 
     def add_player(self, campaign_id: str, player: Player) -> Optional[Campaign]:
         campaign = self.get_campaign(campaign_id)

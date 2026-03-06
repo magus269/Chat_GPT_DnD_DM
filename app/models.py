@@ -30,10 +30,18 @@ class DndBeyondCharacterLink(BaseModel):
     character_id: Optional[str] = None
 
 
+class DndBeyondCampaignSummary(BaseModel):
+    campaign_url: str
+    campaign_id: Optional[str] = None
+    title: Optional[str] = None
+
+
 class DndBeyondConfig(BaseModel):
     campaign_url: Optional[str] = None
     campaign_id: Optional[str] = None
+    accessible_campaigns: List[DndBeyondCampaignSummary] = Field(default_factory=list)
     character_links: List[DndBeyondCharacterLink] = Field(default_factory=list)
+    bridge_token: Optional[str] = None
     last_synced_at: Optional[datetime] = None
 
 
@@ -62,10 +70,9 @@ class ChatThread(BaseModel):
 class Campaign(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     title: str
-    source_type: str = Field(
-        default="custom", description="custom or source_book"
-    )
+    source_type: str = Field(default="custom", description="custom or source_book")
     source_reference: Optional[str] = None
+    source_book: Optional[str] = None
     summary: str = ""
     active_scene: str = ""
     party_code: str = Field(default_factory=lambda: str(uuid4())[:8])
@@ -87,6 +94,11 @@ class CampaignContext(BaseModel):
     recent_events: List[CampaignEvent] = Field(default_factory=list)
 
 
+class SourceBookOption(BaseModel):
+    key: str
+    title: str
+
+
 class CreateCampaignRequest(BaseModel):
     title: str
     source_type: str = "custom"
@@ -96,6 +108,11 @@ class CreateCampaignRequest(BaseModel):
 class UpdateCampaignStateRequest(BaseModel):
     summary: Optional[str] = None
     active_scene: Optional[str] = None
+
+
+class SetSourceBookRequest(BaseModel):
+    key: str
+    title: str
 
 
 class JoinPartyRequest(BaseModel):
@@ -117,6 +134,15 @@ class ConnectDndBeyondRequest(BaseModel):
     campaign_url: HttpUrl
 
 
+class DiscoverDndBeyondCampaignItem(BaseModel):
+    campaign_url: HttpUrl
+    title: Optional[str] = None
+
+
+class DiscoverDndBeyondCampaignsRequest(BaseModel):
+    campaigns: List[DiscoverDndBeyondCampaignItem]
+
+
 class LinkDndBeyondCharacterRequest(BaseModel):
     character_url: HttpUrl
 
@@ -126,6 +152,21 @@ class DndBeyondRollRequest(BaseModel):
     content: str
     roll_reference: str
 
+
+
+
+class RotateDndBeyondBridgeTokenResponse(BaseModel):
+    campaign_id: str
+    bridge_token: str
+
+
+class DndBeyondBridgeEventRequest(BaseModel):
+    campaign_id: str
+    bridge_token: str
+    event_type: str
+    actor: str
+    content: str
+    roll_reference: Optional[str] = None
 
 class AddEventRequest(BaseModel):
     type: EventType
