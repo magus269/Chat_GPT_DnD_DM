@@ -94,6 +94,14 @@
         <button onclick="runDmTurn()">Generate DM Turn</button>
       </div>
 
+
+      <div class="card">
+        <h3>7) Browser-extension bridge (AboveVTT-style)</h3>
+        <button onclick="rotateBridgeToken()">Rotate Bridge Token</button>
+        <p id="bridgeToken" class="mono"></p>
+        <button onclick="sendBridgeTestRoll()">Send Test Bridge Roll Event</button>
+      </div>
+
       <div class="card">
         <h3>Response log</h3>
         <div id="log" class="log mono"></div>
@@ -104,6 +112,7 @@
       let campaignId = null;
       let partyCode = null;
       let discovered = [];
+      let bridgeToken = null;
 
       function addLog(obj) {
         const log = document.getElementById("log");
@@ -241,6 +250,35 @@
           const data = await api(`/campaigns/${campaignId}/dm-turn`, "POST", {
             instructions: "Respond as a concise D&D DM and ask what players do next."
           }, true);
+          addLog(data.events[data.events.length - 1]);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+
+      async function rotateBridgeToken() {
+        try {
+          const data = await api(`/campaigns/${campaignId}/integrations/dndbeyond/bridge-token/rotate`, "POST", null, true);
+          bridgeToken = data.bridge_token;
+          document.getElementById("bridgeToken").textContent = `Bridge token: ${bridgeToken}`;
+          addLog(data);
+        } catch (e) {
+          addLog(e.message);
+        }
+      }
+
+      async function sendBridgeTestRoll() {
+        try {
+          if (!bridgeToken) throw new Error("Rotate bridge token first.");
+          const data = await api("/integrations/dndbeyond/bridge-events", "POST", {
+            campaign_id: campaignId,
+            bridge_token: bridgeToken,
+            event_type: "dice_roll",
+            actor: document.getElementById("rollActor").value || "BridgeActor",
+            content: "Bridge captured roll",
+            roll_reference: document.getElementById("rollRef").value || "bridge-roll-ref",
+          }, false);
           addLog(data.events[data.events.length - 1]);
         } catch (e) {
           addLog(e.message);

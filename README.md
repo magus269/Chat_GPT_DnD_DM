@@ -24,7 +24,8 @@ This repository contains a starter backend for an **asynchronous D&D campaign ma
   - connect one DDB campaign URL to local campaign metadata
   - link each player to a DDB character URL
   - ingest DDB roll references into campaign events
-- Includes a basic browser test UI at `/app` with source book dropdown and dice-roll capture.
+  - rotate campaign bridge tokens + ingest browser-extension bridge events (AboveVTT-style pattern)
+- Includes a basic browser test UI at `/app` with source book dropdown, dice-roll capture, and bridge-token test tools.
 - Persist campaign state to `./data/campaigns/*.json`.
 
 ## Quick start
@@ -53,6 +54,7 @@ Current integration is adapter-style:
 2. Select one campaign URL and connect it (`/connect`).
 3. Link local players to DDB character URLs (`/character-link`).
 4. Record DDB roll references into the campaign timeline (`/rolls`).
+5. For AboveVTT-style automation, rotate a campaign bridge token and ingest extension events via `/integrations/dndbeyond/bridge-events`.
 
 This gives you continuity and traceability now, while leaving room for future automation (e.g., browser extension sync).
 

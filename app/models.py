@@ -41,6 +41,7 @@ class DndBeyondConfig(BaseModel):
     campaign_id: Optional[str] = None
     accessible_campaigns: List[DndBeyondCampaignSummary] = Field(default_factory=list)
     character_links: List[DndBeyondCharacterLink] = Field(default_factory=list)
+    bridge_token: Optional[str] = None
     last_synced_at: Optional[datetime] = None
 
 
@@ -151,6 +152,21 @@ class DndBeyondRollRequest(BaseModel):
     content: str
     roll_reference: str
 
+
+
+
+class RotateDndBeyondBridgeTokenResponse(BaseModel):
+    campaign_id: str
+    bridge_token: str
+
+
+class DndBeyondBridgeEventRequest(BaseModel):
+    campaign_id: str
+    bridge_token: str
+    event_type: str
+    actor: str
+    content: str
+    roll_reference: Optional[str] = None
 
 class AddEventRequest(BaseModel):
     type: EventType

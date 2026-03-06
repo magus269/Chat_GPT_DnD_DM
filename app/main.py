@@ -22,6 +22,7 @@ from app.models import (
     CreateCampaignRequest,
     CreateThreadRequest,
     DiscoverDndBeyondCampaignsRequest,
+    DndBeyondBridgeEventRequest,
     DndBeyondCampaignSummary,
     DndBeyondRollRequest,
     EventType,
@@ -30,6 +31,7 @@ from app.models import (
     LinkDndBeyondCharacterRequest,
     Player,
     PostThreadMessageRequest,
+    RotateDndBeyondBridgeTokenResponse,
     SetSourceBookRequest,
     SourceBookOption,
     UpdateCampaignStateRequest,
@@ -239,6 +241,45 @@ def add_dndbeyond_roll(
         raise HTTPException(status_code=404, detail="Campaign not found")
     return updated
 
+
+
+
+@app.post("/campaigns/{campaign_id}/integrations/dndbeyond/bridge-token/rotate", response_model=RotateDndBeyondBridgeTokenResponse)
+def rotate_dndbeyond_bridge_token(
+    campaign_id: str,
+    x_party_code: str | None = Header(default=None),
+) -> RotateDndBeyondBridgeTokenResponse:
+    campaign = _campaign_or_404(campaign_id)
+    _require_party_access(campaign, x_party_code)
+
+    rotated = repo.rotate_dndbeyond_bridge_token(campaign_id)
+    if rotated is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    _, token = rotated
+    return RotateDndBeyondBridgeTokenResponse(campaign_id=campaign_id, bridge_token=token)
+
+
+@app.post("/integrations/dndbeyond/bridge-events", response_model=Campaign)
+def ingest_dndbeyond_bridge_event(req: DndBeyondBridgeEventRequest) -> Campaign:
+    campaign = _campaign_or_404(req.campaign_id)
+
+    expected = campaign.dndbeyond.bridge_token
+    if not expected:
+        raise HTTPException(status_code=403, detail="Bridge token not configured for campaign")
+    if req.bridge_token != expected:
+        raise HTTPException(status_code=403, detail="Invalid bridge token")
+
+    updated = repo.append_bridge_event(
+        req.campaign_id,
+        actor=req.actor,
+        content=req.content,
+        roll_reference=req.roll_reference,
+        event_type=req.event_type,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return updated
 
 @app.post("/campaigns/{campaign_id}/players", response_model=Campaign)
 def join_party(

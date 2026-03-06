@@ -79,3 +79,25 @@ def test_campaign_flow_with_source_books_and_dndbeyond_campaign_discovery() -> N
     )
     assert roll_resp.status_code == 200
     assert roll_resp.json()["events"][-1]["type"] == "dice_roll"
+
+
+    rotate_token = client.post(
+        f"/campaigns/{campaign_id}/integrations/dndbeyond/bridge-token/rotate",
+        headers=headers,
+    )
+    assert rotate_token.status_code == 200
+    bridge_token = rotate_token.json()["bridge_token"]
+
+    bridge_roll = client.post(
+        "/integrations/dndbeyond/bridge-events",
+        json={
+            "campaign_id": campaign_id,
+            "bridge_token": bridge_token,
+            "event_type": "dice_roll",
+            "actor": "Aria",
+            "content": "Bridge roll: Perception 14",
+            "roll_reference": "ddb-roll-bridge-1",
+        },
+    )
+    assert bridge_roll.status_code == 200
+    assert bridge_roll.json()["events"][-1]["type"] == "dice_roll"

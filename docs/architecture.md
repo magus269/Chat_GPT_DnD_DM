@@ -22,6 +22,7 @@
    - Connect one selected campaign URL to the local campaign.
    - Link DDB character URLs to local players.
    - Ingest external dice roll references as `dice_roll` events.
+   - Support extension bridge token + bridge event ingestion for AboveVTT-style overlays.
 
 ## Auth approach (MVP)
 
